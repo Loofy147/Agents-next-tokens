@@ -70,6 +70,36 @@ class InverseModel(nn.Module):
         action_pred = self.fc3(F.relu(latent_goal))
         return action_pred, latent_goal
 
+class Empowerment(nn.Module):
+    def __init__(self, state_dim, action_dim, hidden_dim=64):
+        super(Empowerment, self).__init__()
+        self.forward_model = nn.Sequential(
+            nn.Linear(state_dim + action_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, state_dim)
+        )
+        self.discriminator = nn.Sequential(
+            nn.Linear(state_dim + state_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, state, action, next_state):
+        # Empowerment as mutual information I(a; s')
+        predicted_next_state = self.forward_model(torch.cat([state, action], dim=-1))
+        # For simplicity, we'll use a noise-contrastive estimation proxy
+        real_pair = torch.cat([state, next_state], dim=-1)
+        fake_pair = torch.cat([state, predicted_next_state], dim=-1)
+
+        real_score = self.discriminator(real_pair)
+        fake_score = self.discriminator(fake_pair)
+
+        # This is a simplified proxy for mutual information
+        empowerment_reward = -torch.log(1 - real_score + 1e-8) + torch.log(fake_score + 1e-8)
+        return empowerment_reward
+
+
 # ReplayBuffer remains the same as T1
 class ReplayBuffer:
     def __init__(self, capacity, alpha=0.6):
@@ -119,8 +149,8 @@ class ReplayBuffer:
             similarities.append(sim)
         return np.argmax(similarities)
 
-# --- T2 Hierarchical Agent ---
-class T2_HIRO_Agent:
+# --- T3 Hierarchical Agent ---
+class T3_Agent:
     def __init__(self, state_dim, action_dim, size, latent_goal_dim=8):
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -132,10 +162,18 @@ class T2_HIRO_Agent:
         self.epsilon = 1.0
         self.epsilon_decay = 0.999
         self.cql_penalty = 0.1
+        self.empowerment_coeff = 0.2
+        self.infogain_coeff = 0.1
+        self.augmentation_noise = 0.02
+
 
         # Goal-conditioned Inverse Model
         self.inverse_model = InverseModel(state_dim, action_dim, latent_goal_dim)
         self.inverse_model_optimizer = optim.Adam(self.inverse_model.parameters(), lr=1e-3)
+
+        # Empowerment Module
+        self.empowerment = Empowerment(state_dim, action_dim)
+        self.empowerment_optimizer = optim.Adam(self.empowerment.parameters(), lr=1e-3)
 
         # Worker (conditioned on latent goal)
         self.worker_critics = [Critic(state_dim + latent_goal_dim, action_dim) for _ in range(3)]
@@ -177,7 +215,36 @@ class T2_HIRO_Agent:
         self._train_inverse_model(batch_size)
         self._train_worker(batch_size)
         self._train_manager(batch_size)
+        self._train_empowerment(batch_size)
         self.epsilon = max(0.05, self.epsilon * self.epsilon_decay)
+
+    def _train_empowerment(self, batch_size):
+        if len(self.worker_replay.buffer) < batch_size: return
+        samples, _ = self.worker_replay.sample(batch_size)
+        s, a, _, s_next, _, _ = map(np.array, zip(*samples))
+
+        s = torch.FloatTensor(s)
+        a = F.one_hot(torch.LongTensor(a), num_classes=self.action_dim).float()
+        s_next = torch.FloatTensor(s_next)
+
+        # Train the forward model
+        predicted_next_state = self.empowerment.forward_model(torch.cat([s, a], dim=-1))
+        forward_loss = F.mse_loss(predicted_next_state, s_next)
+
+        # Train the discriminator
+        real_pair = torch.cat([s, s_next], dim=-1)
+        fake_pair = torch.cat([s, predicted_next_state.detach()], dim=-1)
+
+        real_score = self.empowerment.discriminator(real_pair)
+        fake_score = self.empowerment.discriminator(fake_pair)
+
+        discriminator_loss = F.binary_cross_entropy(real_score, torch.ones_like(real_score)) + \
+                             F.binary_cross_entropy(fake_score, torch.zeros_like(fake_score))
+
+        empowerment_loss = forward_loss + discriminator_loss
+        self.empowerment_optimizer.zero_grad()
+        empowerment_loss.backward()
+        self.empowerment_optimizer.step()
 
     def _train_inverse_model(self, batch_size):
         if len(self.worker_replay.buffer) < batch_size: return
@@ -210,12 +277,25 @@ class T2_HIRO_Agent:
                 processed_samples.append((s, a, r, s_next, done, z))
 
         s, a, r, s_next, done, z = map(np.array, zip(*processed_samples))
-        s = torch.FloatTensor(s)
-        a = torch.LongTensor(a)
+        s = torch.FloatTensor(s) + torch.randn_like(torch.FloatTensor(s)) * self.augmentation_noise
+        a_long = torch.LongTensor(a)
         r = torch.FloatTensor(r)
         s_next = torch.FloatTensor(s_next)
         done = torch.FloatTensor(done)
         z = torch.FloatTensor(z)
+
+        # --- T3: Intrinsic Rewards ---
+        # Empowerment Reward
+        empowerment_reward = self.empowerment(s, F.one_hot(a_long, num_classes=self.action_dim).float(), s_next).squeeze(-1)
+
+        # Info-Gain Reward (critic disagreement)
+        with torch.no_grad():
+            q_preds = torch.stack([c(torch.cat([s, z], dim=1)) for c in self.worker_critics])
+            info_gain_reward = q_preds.var(dim=0).mean(dim=1)
+
+        intrinsic_reward = self.empowerment_coeff * empowerment_reward + self.infogain_coeff * info_gain_reward
+        r += intrinsic_reward.detach()
+
 
         # Critic training (similar to T1, but with latent goals)
         td_errors = []
@@ -228,7 +308,7 @@ class T2_HIRO_Agent:
                 min_q_next = torch.min(torch.stack([t(s_next_g).gather(1, greedy_a) for t in self.worker_targets]), dim=0)[0]
                 target = r.unsqueeze(1) + self.gamma * (1 - done.unsqueeze(1)) * (min_q_next - self.cql_penalty)
 
-            q_values = self.worker_critics[i](sg).gather(1, a.unsqueeze(1))
+            q_values = self.worker_critics[i](sg).gather(1, a_long.unsqueeze(1))
             loss = F.mse_loss(q_values, target)
             self.worker_optimizers[i].zero_grad()
             loss.backward()
@@ -320,8 +400,8 @@ def run_evaluation(agent, envs):
 
 if __name__ == '__main__':
     envs = [KeyDoorEnv(seed=i) for i in range(4)]
-    agent = T2_HIRO_Agent(state_dim=envs[0]._get_obs().shape[0], action_dim=4, size=envs[0].size)
+    agent = T3_Agent(state_dim=envs[0]._get_obs().shape[0], action_dim=4, size=envs[0].size)
 
     avg_episodes, hit_rate = run_evaluation(agent, envs)
-    print(f"T2 Agent - Average episodes to first solve: {avg_episodes:.2f}")
-    print(f"T2 Agent - Subgoal hit rate: {hit_rate:.2%}")
+    print(f"T3 Agent - Average episodes to first solve: {avg_episodes:.2f}")
+    print(f"T3 Agent - Subgoal hit rate: {hit_rate:.2%}")
