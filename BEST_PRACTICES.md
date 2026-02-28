@@ -35,3 +35,12 @@ This document provides a set of checklists and best practices to ensure the qual
 *   **Write a Clear Commit Message:** Write a descriptive commit message that explains the purpose of the change.
 *   **Request a Code Review:** Before merging a branch, request a code review from another developer.
 *   **Update Documentation:** If a change affects the agent's architecture or usage, update the relevant documentation (`ROADMAP.md`, `IMPLEMENTATION_PLAN.md`, etc.).
+
+## High-Q Development Principles
+
+As we evolve the agent, we must adhere to the **High-Q (Highest Quality)** philosophy:
+
+1.  **Metric-Driven Development**: Every new feature or component must be evaluated against the six High-Q dimensions (G, C, S, A, H, V).
+2.  **Modular Capability Design**: Functions and logic should be encapsulated as "Skills" that can be registered, versioned, and evaluated independently.
+3.  **Recursive Self-Improvement**: Systems should include feedback loops that monitor performance deltas and suggest (or implement) optimizations to reach Q-targets.
+4.  **Structural Coherence**: Maintain a clear logical hierarchy in both code and documentation, ensuring synergy across all system layers.

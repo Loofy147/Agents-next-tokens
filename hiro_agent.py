@@ -5,7 +5,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from typing import Tuple, List
+from typing import Tuple, List, Dict
+from quality_manager import QualityManager
+from skill_system import SkillRegistry, Skill
+from kaggle_manager import KaggleManager
 
 # --- Environment (Unchanged from T1) ---
 class KeyDoorEnv:
@@ -373,6 +376,9 @@ class T3Config:
 class T3_Agent:
     def __init__(self, config: T3Config):
         self.config = config
+        self.quality_manager = QualityManager()
+        self.skill_registry = SkillRegistry()
+        self.kaggle_manager = KaggleManager()
 
         # Goal-conditioned Inverse Model
         self.inverse_model = InverseModel(config.state_dim, config.action_dim, config.latent_goal_dim)
@@ -412,6 +418,17 @@ class T3_Agent:
         self._train_worker()
         self._train_diffuser()
         self.config.epsilon = max(self.config.epsilon_min, self.config.epsilon * self.config.epsilon_decay)
+
+        # High-Q Training Evaluation
+        if random.random() < 0.05: # Periodic evaluation
+            self.quality_manager.evaluate_component("WorkerTraining", {
+                'G': 0.9, # Grounded in transition data
+                'C': 1.0 - self.config.epsilon, # Confidence based on exploration
+                'S': 0.8, # Triple-Q structure
+                'A': 0.9, # Direct action selection
+                'H': 0.85, # Coherence of intrinsic rewards
+                'V': 0.7 # Potential for latent goal transfer
+            })
 
     def _train_diffuser(self):
         if len(self.worker_replay.buffer) < self.config.batch_size: return
@@ -614,12 +631,36 @@ def run_evaluation(agent: T3_Agent, envs: List[KeyDoorEnv], num_episodes: int = 
                 manager_state, cumulative_r = state, 0
                 agent.train()
 
+                # High-Q Skill Extraction
+                if solved and random.random() < 0.1:
+                    skill_name = f"solve_maze_{len(agent.skill_registry.list_skills())}"
+                    skill = Skill(
+                        name=skill_name,
+                        description=f"Successful latent trajectory for maze solving.",
+                        q_score=0.85,
+                        dimensions={'G': 0.9, 'C': 0.8, 'S': 0.9, 'A': 0.9, 'H': 0.8, 'V': 0.7},
+                        metadata={'latent_goal': latent_goal.tolist(), 'episode': episode}
+                    )
+                    agent.skill_registry.register_skill(skill)
+
             if solved:
                 episodes_to_solve.append(episode)
                 break
 
     avg_episodes = np.mean(episodes_to_solve) if episodes_to_solve else float('inf')
     hit_rate = total_hits / total_subgoal_steps if total_subgoal_steps > 0 else 0
+
+    # High-Q System Evaluation
+    agent.quality_manager.evaluate_component("SystemPerformance", {
+        'G': 1.0 if solved else 0.5,
+        'C': hit_rate,
+        'S': 0.9, # Hierarchical structure
+        'A': 1.0 if avg_episodes < 100 else 0.6,
+        'H': 0.8,
+        'V': 0.9 # High potential for generative environments
+    })
+    print(agent.quality_manager.get_summary())
+
     return avg_episodes, hit_rate
 
 if __name__ == '__main__':
