@@ -2,6 +2,18 @@
 
 This document outlines the forward-looking development roadmap for the hierarchical reinforcement learning agent, building upon the T3 architecture. The goal is to evolve the agent from a specialized problem-solver into a generalist, language-guided foundation agent capable of in-context learning and zero-shot generalization.
 
+## 🌟 The High-Q Philosophy
+
+Starting with T4, all development is guided by the **High-Q (Highest Quality)** principle. Every system component and emergent capability is evaluated against six dimensions of quality:
+- **G (Grounding)**: Empirical validity and factual accuracy.
+- **C (Certainty)**: Confidence levels and probabilistic calibration.
+- **S (Structure)**: Logical hierarchy and organization.
+- **A (Applicability)**: Direct utility and actionability.
+- **H (Coherence)**: Internal consistency and synergy.
+- **V (Generativity)**: Potential for transfer learning and emergent patterns.
+
+Target Q-Score for the Foundation Agent: **0.95+**
+
 ---
 
 ### Year 4 (T4) - Foundational World Model

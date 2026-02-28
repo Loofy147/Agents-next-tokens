@@ -2,6 +2,15 @@
 
 This document outlines the step-by-step plan for implementing the T4 Foundational World Model, as defined in `ROADMAP.md`.
 
+## 0. High-Q System Integration (Completed)
+
+*   **Objective:** Integrate a "High-Q" evaluation and skill management system into the agent.
+*   **Rationale:** To provide a principled framework for measuring agent quality and preparing for modular skill discovery.
+*   **Action Items:**
+    *   Implement `QualityManager` for multi-dimensional Q-Score calculation.
+    *   Implement `SkillRegistry` for modular capability management.
+    *   Integrate these components into the agent's training and evaluation loops.
+
 ## 1. De-scoping and Component Removal
 
 *   **Objective:** Simplify the existing `hiro_agent.py` to create a clean foundation for the new architecture.
