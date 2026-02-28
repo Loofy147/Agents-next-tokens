@@ -14,6 +14,11 @@ Starting with T4, all development is guided by the **High-Q (Highest Quality)** 
 
 Target Q-Score for the Foundation Agent: **0.95+**
 
+## 🏆 Key Milestones
+
+- **High-Q Integration**: Establish a formal quality framework and skill registry. (Completed)
+- **Kaggle Ecosystem Connection**: Enable the agent to participate in real-world data science competitions to validate "Applicability" (A). (In Progress)
+
 ---
 
 ### Year 4 (T4) - Foundational World Model

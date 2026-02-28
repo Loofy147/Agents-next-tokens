@@ -10,6 +10,7 @@ This document outlines the step-by-step plan for implementing the T4 Foundationa
     *   Implement `QualityManager` for multi-dimensional Q-Score calculation.
     *   Implement `SkillRegistry` for modular capability management.
     *   Integrate these components into the agent's training and evaluation loops.
+    *   Implement `KaggleManager` and `CompetitionSkill` to bridge the gap between simulation and real-world application.
 
 ## 1. De-scoping and Component Removal
 

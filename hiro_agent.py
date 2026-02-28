@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from typing import Tuple, List, Dict
 from quality_manager import QualityManager
 from skill_system import SkillRegistry, Skill
+from kaggle_manager import KaggleManager
 
 # --- Environment (Unchanged from T1) ---
 class KeyDoorEnv:
@@ -377,6 +378,7 @@ class T3_Agent:
         self.config = config
         self.quality_manager = QualityManager()
         self.skill_registry = SkillRegistry()
+        self.kaggle_manager = KaggleManager()
 
         # Goal-conditioned Inverse Model
         self.inverse_model = InverseModel(config.state_dim, config.action_dim, config.latent_goal_dim)
