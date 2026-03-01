@@ -1,0 +1,50 @@
+{
+  "solve_maze_0": {
+    "name": "solve_maze_0",
+    "description": "Successful latent trajectory for maze solving in imagination.",
+    "q_score": 0.92,
+    "dimensions": {
+      "G": 0.9,
+      "C": 0.9,
+      "S": 0.9,
+      "A": 0.9,
+      "H": 0.9,
+      "V": 0.9
+    },
+    "metadata": {
+      "episode": 0
+    }
+  },
+  "solve_maze_1": {
+    "name": "solve_maze_1",
+    "description": "Successful latent trajectory for maze solving in imagination.",
+    "q_score": 0.92,
+    "dimensions": {
+      "G": 0.9,
+      "C": 0.9,
+      "S": 0.9,
+      "A": 0.9,
+      "H": 0.9,
+      "V": 0.9
+    },
+    "metadata": {
+      "episode": 0
+    }
+  },
+  "solve_maze_2": {
+    "name": "solve_maze_2",
+    "description": "Successful latent trajectory for maze solving in imagination.",
+    "q_score": 0.92,
+    "dimensions": {
+      "G": 0.9,
+      "C": 0.9,
+      "S": 0.9,
+      "A": 0.9,
+      "H": 0.9,
+      "V": 0.9
+    },
+    "metadata": {
+      "episode": 9
+    }
+  }
+}
