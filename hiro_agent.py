@@ -33,19 +33,27 @@ class KeyDoorEnv:
 
     def step(self, action):
         self.steps += 1
+        old_pos = self.agent_pos.copy()
         x, y = self.agent_pos
         if action == 0 and y < self.size - 1: y += 1
-        if action == 1 and y > 0: y -= 1
-        if action == 2 and x < self.size - 1: x += 1
-        if action == 3 and x > 0: x -= 1
+        elif action == 1 and y > 0: y -= 1
+        elif action == 2 and x < self.size - 1: x += 1
+        elif action == 3 and x > 0: x -= 1
         self.agent_pos = np.array([x, y], dtype=np.float32)
 
-        reward = -0.1
+        reward = -0.05 # Reduced step penalty
+
+        # Reward Shaping: Distance reduction
+        target = self.door_pos if self.has_key else self.key_pos
+        old_dist = np.linalg.norm(old_pos - target)
+        new_dist = np.linalg.norm(self.agent_pos - target)
+        reward += (old_dist - new_dist) * 0.1 # Small bonus for moving closer
+
         done = False
         if np.array_equal(self.agent_pos, self.key_pos) and not self.has_key:
-            self.has_key = True; reward = 1.0
+            self.has_key = True; reward += 2.0 # Increased key reward
         if np.array_equal(self.agent_pos, self.door_pos) and self.has_key:
-            reward = 10.0; done = True
+            reward += 10.0; done = True
         if self.steps >= self.max_steps:
             done = True
         return self._get_obs(), reward, done, {}
@@ -259,7 +267,23 @@ class T4_Agent:
 
     def _train_world_model(self):
         samples, indices = self.replay.sample(self.config.batch_size)
-        s, a, r, s_next, done = map(np.array, zip(*samples))
+
+        # Hindsight Experience Replay (Simplified for T4)
+        # We augment the batch with "virtual" success transitions
+        processed_samples = []
+        for s, a, r, s_next, done in samples:
+            processed_samples.append((s, a, r, s_next, done))
+            # If we didn't solve it, sometimes pretend the reached state was the goal
+            if not done and random.random() < 0.2:
+                # In KeyDoor, "solving" means reaching door with key.
+                # Virtual reward for reaching ANY new state if we are struggling.
+                processed_samples.append((s, a, r + 0.1, s_next, done))
+
+        # Trim to batch size
+        if len(processed_samples) > self.config.batch_size:
+            processed_samples = random.sample(processed_samples, self.config.batch_size)
+
+        s, a, r, s_next, done = map(np.array, zip(*processed_samples))
 
         s = torch.FloatTensor(s).to(self.device)
         a = torch.LongTensor(a).to(self.device)
@@ -332,15 +356,15 @@ class T4_Agent:
         critic_loss = F.mse_loss(values, targets.detach())
 
         # Actor update (PG)
-        # Using advantages for simplicity
         advantages = (targets - values).detach()
-        # Sample action again for backprop through Actor
-        # (Wait, standard Dreamer uses reparameterization, for discrete it is trickier)
-        # Let's use simple REINFORCE with baseline for now
-        # Actually for simplicity in this T4 start, just use target values
-        actor_loss = -(advantages * F.log_softmax(self.actor(torch.stack(z_history[:-1])), dim=-1)).mean()
+        log_probs = F.log_softmax(self.actor(torch.stack(z_history[:-1])), dim=-1)
+        probs = torch.exp(log_probs)
+        entropy = -(probs * log_probs).sum(dim=-1).mean()
 
-        ac_loss = critic_loss + actor_loss
+        actor_loss = -(advantages * log_probs).mean()
+
+        # Add entropy bonus to encourage exploration
+        ac_loss = critic_loss + actor_loss - 0.01 * entropy
 
         self.ac_optimizer.zero_grad()
         ac_loss.backward()
