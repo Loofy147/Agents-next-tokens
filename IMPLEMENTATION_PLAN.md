@@ -1,4 +1,4 @@
-# T4 Implementation Plan: Foundational World Model
+# T4 Implementation Plan: Foundational World Model [IN PROGRESS]
 
 This document outlines the step-by-step plan for implementing the T4 Foundational World Model, as defined in `ROADMAP.md`.
 
